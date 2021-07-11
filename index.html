@@ -1,0 +1,151 @@
+<h1>Geolocation</h1>
+<button type="button" id="btnLocation" onclick="btnLocationClick()">Get Location</button>
+<button type="button" id="btnWatchStart" onclick="btnWatchStartClick()">Watch Start</button>
+<button type="button" id="btnWatchStop" onclick="btnWatchStopClick()" disabled>Watch Stop</button>
+<br/>
+<label>timestamp</label>
+<input type="text" id="txtTimestamp"/><br/>
+<label>latitude</label>
+<input type="text" id="txtLatitude"/><br/>
+<label>longitude</label>
+<input type="text" id="txtLongitude"/><br/>
+<label>accuracy</label>
+<input type="text" id="txtAccuracy"/><br/>
+<label>altitude</label>
+<input type="text" id="txtAltitude"/><br/>
+<br/>
+<button type="button" id="btnSearch" onclick="btnSearchClick()">Search</button><br/>
+<input type="text" id="txtUrl"/><br/>
+<textarea id="txtResult"></textarea>
+<br/>
+<link rel="stylesheet" href="//unpkg.com/leaflet@1.7.1/dist/leaflet.css" integrity="sha512-xodZBNTC5n17Xt2atTPuE1HxjVMSvLVW9ocqUKLsCC5CXdbqCmblAshOMAS6/keqq/sMZMZ19scR4PsZChSR7A==" crossorigin=""/>
+<script src="//unpkg.com/leaflet@1.7.1/dist/leaflet.js" integrity="sha512-XQoYMqMTK8LvdxXYG3nZ448hOEQiglfqkJs1NOQV44cWnUrBc8PkAOcXy20w0vlaXaVUearIOBhiXZ5V3ynxwA==" crossorigin=""></script>
+<button type="button" id="btnDisplay" onclick="btnDisplayClick()">Display</button>
+<div id="mapid" style="width:240px; height: 240px;"></div>
+
+<script>
+
+var mymap = L.map('mapid',{
+  center: [35.710063, 139.8107],
+  zoom: 16
+});
+ 
+L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",{
+  attribution: "&copy; <a href='http://osm.org/copyright'>OpenStreetMap</a> contributors, <a href='http://creativecommons.org/licenses/by-sa/2.0/'>CC-BY-SA</a>"
+}).addTo(mymap);
+
+async function btnLocationClick() {
+    if(!navigator.geolocation) {
+        alert('GeoLocation API is not available!');
+        return;
+    }
+
+    navigator.geolocation.getCurrentPosition(onSuccess, function(err) {
+        alert('Unable to retrieve current location!');
+    });
+}
+
+async function onSuccess(position) {
+    const timestamp = position.timestamp;
+    const latitude  = position.coords.latitude;
+    const longitude = position.coords.longitude;
+    const accuracy = position.coords.accuracy;
+    const altitude = position.coords.altitude;
+
+    document.getElementById('txtTimestamp').value = timestamp;
+    document.getElementById('txtLatitude').value = latitude;
+    document.getElementById('txtLongitude').value = longitude;
+    document.getElementById('txtAccuracy').value = accuracy;
+    document.getElementById('txtAltitude').value = altitude;
+    
+}
+
+var watchID;
+
+async function btnWatchStartClick() {
+    let watchID = navigator.geolocation.watchPosition(
+        function(position) {
+            document.getElementById('btnWatchStart').disabled = true;
+            document.getElementById('btnWatchStop').disabled = false;
+            onSuccess(position);
+        },
+        function(err) {
+            alert('Unable to retrieve watch location!');
+    });
+}
+
+async function btnWatchStopClick() {
+    navigator.geolocation.clearWatch(watchID);
+    document.getElementById('btnWatchStart').disabled = false;
+    document.getElementById('btnWatchStop').disabled = true;
+}
+
+async function btnSearchClick() {
+    const latitude = document.getElementById('txtLatitude').value;
+    const longitude = document.getElementById('txtLongitude').value;
+
+    const results = await getAddress(latitude, longitude);
+    const muniCd = results.muniCd;
+    const lv01Nm = results.lv01Nm;
+
+    const pref = await getPrefecture(muniCd);
+    const city = await getCity(muniCd);
+    document.getElementById('txtResult').value = pref + ' ' + city + ' ' + lv01Nm;
+}
+
+async function getAddress(latitude, longitude) {
+    const url = `https://mreversegeocoder.gsi.go.jp/reverse-geocoder/LonLatToAddress?lat=${latitude}&lon=${longitude}`;
+    document.getElementById('txtUrl').value = url;
+    const response = await fetch(url);
+    if (response.ok) {
+        const json = await response.json();
+        return json.results;
+    } else {
+        throw "HTTP error: " + response.status;
+    }
+}
+
+async function getPrefecture(muniCd) {
+    const area = muniCd.substring(0, 2);
+    const url = `https://madefor.github.io/jisx0401/api/v1/jisx0401-ja.json`;
+    const response = await fetch(url);
+    if (response.ok) {
+        const json = await response.json();
+        return json[area];
+    } else {
+        throw "HTTP error: " + response.status;
+    }
+}
+
+async function getCity(muniCd) {
+    const area = muniCd.substring(0, 2);
+    const url = `https://www.land.mlit.go.jp/webland/api/CitySearch?area=${area}`;
+    const response = await fetch(url);
+    if (response.ok) {
+        const json = await response.json();
+        const status = json.status;
+        const data = json.data;
+        for (const item of data) {
+            if (item.id === muniCd) {
+                return item.name;
+            }
+        }
+        throw `${muniCd} not found!`;
+    } else {
+        throw "HTTP error: " + response.status;
+    }    
+}
+
+async function btnDisplayClick() {
+    const latitude = document.getElementById('txtLatitude').value;
+    const longitude = document.getElementById('txtLongitude').value;
+
+    mymap.setView([latitude, longitude]);
+    /*
+    L.marker([latitude, longitude])
+        .addTo(mymap)
+        .bindPopup("Current Pos")
+        .openPopup();
+    */
+}
+</script>
